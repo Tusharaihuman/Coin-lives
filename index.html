@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coin Game - Google SignUp/SignIn</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    #login-container {
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin: 50px auto;
+      width: 300px;
+    }
+    .player {
+      display: none;
+    }
+    .coins {
+      font-size: 48px;
+      color: #444;
+    }
+    button {
+      padding: 10px 20px;
+      background: #ff6b6b;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    #game-container {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      margin: 50px auto;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      width: 300px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Container -->
+  <div id="login-container">
+    <h2>Sign in to play</h2>
+    <button id="login-btn">Sign in with Google</button>
+    <p>New to the game? <button id="signup-btn">Sign up with Google</button></p>
+  </div>
+
+  <!-- Game Section -->
+  <div id="game-container">
+    <h1>Welcome, <span id="username"></span></h1>
+
+    <!-- Player Section -->
+    <div id="player" class="player">
+      <h2>Your Coins</h2>
+      <div class="coins" id="coins">4</div>
+      <button id="decrease-coins-btn" onclick="decreaseCoins()">Decrease Coins</button>
+    </div>
+
+    <!-- Other Player Section -->
+    <div id="other-player" class="player">
+      <h2>Other Player's Coins</h2>
+      <div class="coins" id="other-coins">4</div>
+    </div>
+
+    <h3>Notifications</h3>
+    <div id="notifications"></div>
+  </div>
+
+  <!-- Firebase Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js"></script>
+
+  <script>
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+
+    // Firebase Services
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // DOM Elements
+    const loginContainer = document.getElementById('login-container');
+    const gameContainer = document.getElementById('game-container');
+    const usernameElement = document.getElementById('username');
+    const coinsElement = document.getElementById('coins');
+    const notificationsElement = document.getElementById('notifications');
+    const otherCoinsElement = document.getElementById('other-coins');
+    const decreaseCoinsButton = document.getElementById('decrease-coins-btn');
+
+    let userId;
+    let playerCoins = 4;
+    let otherPlayerCoins = 4;
+    let otherPlayerId;
+
+    // Google Sign-In
+    document.getElementById('login-btn').addEventListener('click', () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider)
+        .then((result) => {
+          const user = result.user;
+          userId = user.uid;
+          usernameElement.textContent = user.displayName;
+
+          // Hide login and show game container
+          loginContainer.style.display = 'none';
+          gameContainer.style.display = 'block';
+
+          // Load User Data
+          loadUserData();
+        })
+        .catch((error) => {
+          console.error(error);
+        });
+    });
+
+    // Google Sign-Up
+    document.getElementById('signup-btn').addEventListener('click', () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider)
+        .then((result) => {
+          const user = result.user;
+          userId = user.uid;
+          usernameElement.textContent = user.displayName;
+
+          // Hide login and show game container
+          loginContainer.style.display = 'none';
+          gameContainer.style.display = 'block';
+
+          // Initialize User Data
+          initializeUserData();
+        })
+        .catch((error) => {
+          console.error(error);
+        });
+    });
+
+    // Load User Data
+    function loadUserData() {
+      db.collection('users').doc(userId).get()
+        .then((doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            playerCoins = data.coins;
+            coinsElement.textContent = playerCoins;
+            notificationsElement.innerHTML = data.notifications.map(item => `<div>${item}</div>`).join('');
+
+            // Load the other player's data (assuming their userId is stored somewhere)
+            otherPlayerId = data.otherPlayerId; // you need to set this when registering players
+            loadOtherPlayerData();
+          } else {
+            // Initialize New User
+            saveUserData();
+          }
+        });
+    }
+
+    // Initialize User Data
+    function initializeUserData() {
+      db.collection('users').doc(userId).set({
+        coins: playerCoins,
+        notifications: [],
+        otherPlayerId: null,  // Initially set to null, will be set once other player joins
+      });
+    }
+
+    // Load Other Player Data
+    function loadOtherPlayerData() {
+      db.collection('users').doc(otherPlayerId).get()
+        .then((doc) => {
+          if (doc.exists) {
+            const otherData = doc.data();
+            otherPlayerCoins = otherData.coins;
+            otherCoinsElement.textContent = otherPlayerCoins;
+            disableDecreaseButtonForOtherPlayer();
+          }
+        });
+    }
+
+    // Disable the decrease coins button for the other player
+    function disableDecreaseButtonForOtherPlayer() {
+      decreaseCoinsButton.disabled = false;
+    }
+
+    // Save User Data
+    function saveUserData() {
+      db.collection('users').doc(userId).set({
+        coins: playerCoins,
+        notifications: [],
+        otherPlayerId: otherPlayerId, // Add the other player reference
+      });
+    }
+
+    // Decrease Coins
+    function decreaseCoins() {
+      if (playerCoins > 0) {
+        playerCoins--;
+        if (playerCoins === 0) {
+          playerCoins = 4;
+          addNotification('You are ready for Power Slap!');
+        }
+        coinsElement.textContent = playerCoins;
+        saveUserData();
+      }
+    }
+
+    // Add Notification
+    function addNotification(message) {
+      const now = new Date().toLocaleString();
+      notificationsElement.innerHTML += `<div>${now} - ${message}</div>`;
+
+      db.collection('users').doc(userId).update({
+        notifications: firebase.firestore.FieldValue.arrayUnion(`${now} - ${message}`)
+      });
+    }
+  </script>
+
+</body>
+</html>
